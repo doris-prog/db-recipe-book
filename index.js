@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { ObjectId } = require('mongodb');
 const MongoClient = require('mongodb').MongoClient;
-const brypt = require('bcrypt');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 const dbname = "scpt-recipe-book";
@@ -66,12 +66,6 @@ async function main() {
 
   let db = await connect(mongoUri, dbname);
 
-  // app.get('/', function (req, res) {
-  //   res.json({
-  //     "message": "Hello World!"
-  //   });
-  // })
-
   // display all recipes
   app.get("/recipes", async function (req, res) {
     try {
@@ -86,23 +80,23 @@ async function main() {
   })
 
   // only display selected details 
-  // app.get("/recipes", async function (req, res) {
-  //   try {
-  //     let recipes = await db.collection("recipes").find()
-  //       .project({
-  //         "name": 1,
-  //         "cuisine": 1,
-  //         "tags": 1,
-  //         "prepTime": 1
-  //       }).toArray();
-  //     res.json({
-  //       'recipes': recipes
-  //     })
-  //   } catch (error) {
-  //     console.error("Error fetching recipes: ", error);
-  //     res.status(500);
-  //   }
-  // })
+  app.get("/recipes", async function (req, res) {
+    try {
+      let recipes = await db.collection("recipes").find()
+        .project({
+          "name": 1,
+          "cuisine": 1,
+          "tags": 1,
+          "prepTime": 1
+        }).toArray();
+      res.json({
+        'recipes': recipes
+      })
+    } catch (error) {
+      console.error("Error fetching recipes: ", error);
+      res.status(500);
+    }
+  })
 
   // display recipe with the given id
   app.get("/recipes/:id", async function (req, res) {
@@ -229,7 +223,7 @@ async function main() {
     }
   })
 
-  // add new data
+  // Update existing data
   app.put("/recipes/:id", async function (req, res) {
     try {
       let id = req.params.id;
@@ -292,7 +286,8 @@ async function main() {
     }
   })
 
-  app.delete("/recipes", async function (req, res) {
+  // Delete data
+  app.delete("/recipes/:id", async function (req, res) {
     try {
       let id = req.params.id;
 
@@ -314,15 +309,137 @@ async function main() {
     }
   })
 
+  // Add review
+  app.post('/recipes/:id/reviews', async function (req, res) {
+    try {
+      let recipeId = req.params.id;
+      let { user, rating, comment } = req.body;
+
+      if (!user || !rating || !comment) {
+        return res.status(400).json({
+          "error": "Missing required fields"
+        });
+      }
+
+      let newReview = {
+        review_id: new ObjectId(),
+        user,
+        rating: Number(rating),
+        comment,
+        date: new Date()
+      };
+
+      let result = await db.collection("recipes").updateOne(
+        { "_id": new ObjectId(recipeId) },
+        { '$push': { reviews: newReview }}
+      );
+
+      if (result.matchedCount == 0) {
+        return res.status(404).json({
+          "error": "Recipe not found"
+        });
+      }
+      res.status(201).json({
+        "message": "Review added successfully",
+        'reviewId': newReview.review_id
+      });
+    } catch (error) {
+      console.error('Error adding review: ', error);
+      res.status(500);
+    }
+  });
+
+  // Update review
+  app.put('/recipes/:recipeId/reviews/:reviewId', async function (req, res) {
+    try {
+        let recipeId = req.params.recipeId;
+        let reviewId = req.params.reviewId;
+        let { user, rating, comment } = req.body;
+
+        if (!user || !rating || !comment) {
+          return res.status(400).json({
+            "error": "Missing required fields"
+          });
+        }
+
+        let updatedReview = {
+          reviewId: new ObjectId(reviewId),
+          user,
+          rating: Number(rating),
+          comment,
+          date: new Date()
+        };
+
+        let result = await db.collection("recipes").updateOne(
+          {
+            "_id": new ObjectId(recipeId),
+            "reviews.review_id": new ObjectId(reviewId)
+          },
+          {
+            '$set': { "reviews.$": updatedReview }
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({
+            "error": "Recipe or review not found"
+          });
+        }
+        res.json({
+          "message": "Review updated successfully",
+          reviewId
+        });
+      } catch (error) {
+        console.error("Error updating review: ", error);
+        res.status(500);
+      }
+    });
+
+  // Delete review  
+  app.delete("/recipes/:recipeId/reviews/:reviewId", async function (req, res) {
+    try {
+      let recipeId = req.params.recipeId;
+      let reviewId = req.params.reviewId;
+
+      let result = await db.collection("recipes").updateOne({
+        "_id": new ObjectId(recipeId)},
+        {
+          '$pull': {
+          "reviews": { 
+            reviewId: new ObjectId(reviewId)
+          }
+        }
+      });
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({
+          "error": "Recipe not found"
+        });
+      }
+
+      if (result.modifiedCount === 0) {
+        return res.status(404).json({
+          "error": "Review not found"
+        });
+      }
+      res.status(200).json({
+        "message": "Review deleted successfully"
+      });
+    } catch (error) {
+      console.error("Error deleting review: ", error);
+      res.status(500);
+    }
+  });
+
   // route for user sign up
   // mandatory info: email and password
-  app.post('/user', async function (req, res) {
+  app.post('/users', async function (req, res) {
     try {
       let { email, password } = req.body;
 
       if (!email || !password) {
         return res.status(400).json({
-          "error": "Pleaes provide username and password"
+          "error": "Please provide username and password"
         })
       }
 
@@ -331,12 +448,11 @@ async function main() {
         password: await bcrypt.hash(password, 12)
       };
 
-      await db.collection("users").insertOne(userDoc);
+      let result = await db.collection("users").insertOne(userDoc);
       res.json({
         "message": "New user account has been created",
-        result
+        result,
       });
-
     } catch (e) {
       console.error(e);
       res.status(500);
