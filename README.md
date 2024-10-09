@@ -27,6 +27,15 @@
 // Delete review - 67066a0b553915325305be39
 ![image](https://github.com/user-attachments/assets/6adc2631-8eac-4a3c-858b-0919b0b6420d)
 
+// Add new user - 67066edb0d162c71b8111393
+![image](https://github.com/user-attachments/assets/0562ff34-f7db-4ebb-95bd-ff41af337579)
+
+// Login user
+![image](https://github.com/user-attachments/assets/78288cbe-0c61-4cf2-9be1-f968c5c59393)
+
+
+
+
 
 
 
